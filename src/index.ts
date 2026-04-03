@@ -1,4 +1,9 @@
-import { type ChildProcess, execSync, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  execFileSync,
+  execSync,
+  spawn,
+} from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -76,18 +81,31 @@ function verifyAnvilIntegrity(tarballPath: string): void {
 function installFoundry(): void {
   const asset = getAssetName();
   const tarballPath = join(tmpdir(), asset);
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+  const home = process.env.HOME ?? process.env.USERPROFILE;
+  if (!home) {
+    throw new Error(
+      "Cannot determine home directory (HOME/USERPROFILE not set)",
+    );
+  }
   const foundryBin = join(home, ".foundry", "bin");
 
   console.info(`Anvil not found. Installing Foundry ${FOUNDRY_VERSION}...`);
-  execSync(
-    `curl -fsSL -o ${tarballPath} https://github.com/foundry-rs/foundry/releases/download/v${FOUNDRY_VERSION}/${asset}`,
+  execFileSync(
+    "curl",
+    [
+      "-fsSL",
+      "-o",
+      tarballPath,
+      `https://github.com/foundry-rs/foundry/releases/download/v${FOUNDRY_VERSION}/${asset}`,
+    ],
     { stdio: "inherit" },
   );
   verifyAnvilIntegrity(tarballPath);
   console.info("Tarball integrity verified successfully");
   mkdirSync(foundryBin, { recursive: true });
-  execSync(`tar xzf ${tarballPath} -C ${foundryBin}`, { stdio: "inherit" });
+  execFileSync("tar", ["xzf", tarballPath, "-C", foundryBin], {
+    stdio: "inherit",
+  });
   rmSync(tarballPath);
   process.env.PATH = `${foundryBin}:${process.env.PATH}`;
   console.info(`Foundry ${FOUNDRY_VERSION} installed successfully`);
@@ -108,15 +126,20 @@ const checkPortAvailable = (port: number): Promise<void> =>
 async function waitForAnvil(url: string): Promise<void> {
   const maxAttempts = 15;
   for (let i = 0; i < maxAttempts; i++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
     try {
       const response = await fetch(url, {
         body: JSON.stringify({ id: 1, jsonrpc: "2.0", method: "net_version" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
+        signal: controller.signal,
       });
       if (response.ok) return;
     } catch {
       // Not ready yet
+    } finally {
+      clearTimeout(timeout);
     }
     if (i < maxAttempts - 1) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -182,7 +205,7 @@ export function anvilFork(options: AnvilForkOptions) {
       { stdio: "ignore" },
     );
 
-    const startError = new Promise(function (resolve, reject) {
+    const startError = new Promise(function (_resolve, reject) {
       anvilProcess?.on("error", (err) =>
         reject(new Error(`Failed to start anvil: ${err.message}`)),
       );
