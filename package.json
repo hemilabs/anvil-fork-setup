@@ -38,6 +38,7 @@
     "lint:fix": "eslint --cache . --fix",
     "prepare": "husky",
     "prepublishOnly": "pnpm run build",
+    "test": "vitest run",
     "tsc": "tsc --noEmit"
   },
   "devDependencies": {
