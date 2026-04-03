@@ -140,24 +140,34 @@ export function anvilFork(options: AnvilForkOptions) {
         "--chain-id",
         String(chainId),
       ],
-      { stdio: "pipe" },
+      { stdio: "ignore" },
     );
 
     const startError = new Promise(function (resolve, reject) {
       anvilProcess?.on("error", (err) =>
         reject(new Error(`Failed to start anvil: ${err.message}`)),
       );
-      anvilProcess?.on("exit", function (code, signal) {
-        if (code !== null && code !== 0) {
-          reject(new Error(`Anvil exited with code ${code}`));
-        } else if (signal) {
-          reject(new Error(`Anvil was killed by signal ${signal}`));
-        }
-      });
+      anvilProcess?.on("exit", (code, signal) =>
+        reject(
+          new Error(
+            `Anvil exited before becoming ready (code: ${code}, signal: ${signal})`,
+          ),
+        ),
+      );
     });
 
     const url = `http://127.0.0.1:${port}`;
-    await Promise.race([waitForAnvil(url), startError]);
+    try {
+      await Promise.race([waitForAnvil(url), startError]);
+    } catch (error) {
+      anvilProcess?.removeAllListeners("error");
+      anvilProcess?.removeAllListeners("exit");
+      if (anvilProcess && !anvilProcess.killed) {
+        anvilProcess.kill();
+      }
+      anvilProcess = undefined;
+      throw error;
+    }
     anvilProcess.removeAllListeners("error");
     anvilProcess.removeAllListeners("exit");
     provide("anvilUrl", url);
