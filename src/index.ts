@@ -1,11 +1,27 @@
 import { type ChildProcess, execSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {} from "vitest";
 import type { TestProject } from "vitest/node";
 
 // See https://github.com/foundry-rs/foundry/releases/tag/v1.5.1
 const FOUNDRY_VERSION = "1.5.1";
-const FOUNDRY_COMMIT_SHA = "b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2";
+
+// SHA-256 digests of official release tarballs from GitHub.
+// Retrieved via: gh api repos/foundry-rs/foundry/releases/tags/v1.5.1 --jq '.assets[] | {name, digest}'
+const FOUNDRY_TARBALL_DIGESTS: Record<string, string> = {
+  "darwin-arm64":
+    "sha256:b3bf1752be066e0877911721e0624058171c88fc5616e228937fe4620b41c40d",
+  "darwin-x64":
+    "sha256:a416e79c26d32cd37316232f790b3a1bdeae4dfae09d82627d7a1ace4c281848",
+  "linux-arm64":
+    "sha256:cccf28bdf202289e837a9e21ed213b2b80dc1e806e12f1717bc98a44315c331e",
+  "linux-x64":
+    "sha256:73640b01bd9ed29fdb4965085099371f8cf0dbbec3e2086cf54564efc4dcfe88",
+};
 
 /** Configuration for the Anvil fork instance. */
 export interface AnvilForkOptions {
@@ -26,32 +42,55 @@ function isAnvilInstalled(): boolean {
   }
 }
 
-function verifyAnvilVersion(): void {
-  const output = execSync("anvil --version", { encoding: "utf-8" });
-  if (
-    !output.includes(FOUNDRY_VERSION) ||
-    !output.includes(FOUNDRY_COMMIT_SHA)
-  ) {
+function getAssetName(): string {
+  const arch = process.arch === "x64" ? "amd64" : process.arch;
+  return `foundry_v${FOUNDRY_VERSION}_${process.platform}_${arch}.tar.gz`;
+}
+
+/**
+ * Verifies the downloaded tarball against the expected SHA-256 digest
+ * hardcoded from the official GitHub release. This ensures we always install
+ * the exact binary published by foundry-rs, guarding against tampering or
+ * supply chain attacks.
+ *
+ * Digests are retrieved via the GitHub API's `digest` field on release assets
+ * and must be updated manually when bumping `FOUNDRY_VERSION`.
+ */
+function verifyAnvilIntegrity(tarballPath: string): void {
+  const key = `${process.platform}-${process.arch}`;
+  const expected = FOUNDRY_TARBALL_DIGESTS[key];
+  if (!expected) {
+    throw new Error(`Unsupported platform: ${key}`);
+  }
+  const fileBuffer = readFileSync(tarballPath);
+  const actual = `sha256:${createHash("sha256").update(fileBuffer).digest("hex")}`;
+  if (actual !== expected) {
     throw new Error(
-      `Foundry version mismatch — possible supply chain attack.\n` +
-        `  Expected version ${FOUNDRY_VERSION}, commit ${FOUNDRY_COMMIT_SHA}\n` +
-        `  Got: ${output.trim()}`,
+      `Foundry tarball integrity check failed.\n` +
+        `  Expected: ${expected}\n` +
+        `  Got: ${actual}`,
     );
   }
 }
 
 function installFoundry(): void {
-  // eslint-disable-next-line no-console
-  console.log(`Anvil not found. Installing Foundry ${FOUNDRY_VERSION}...`);
-  execSync("curl -L https://foundry.paradigm.xyz | bash", {
-    env: { ...process.env, SHELL: "/bin/bash" },
-    stdio: "inherit",
-  });
+  const asset = getAssetName();
+  const tarballPath = join(tmpdir(), asset);
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
-  const foundryBin = `${home}/.foundry/bin`;
+  const foundryBin = join(home, ".foundry", "bin");
+
+  console.info(`Anvil not found. Installing Foundry ${FOUNDRY_VERSION}...`);
+  execSync(
+    `curl -fsSL -o ${tarballPath} https://github.com/foundry-rs/foundry/releases/download/v${FOUNDRY_VERSION}/${asset}`,
+    { stdio: "inherit" },
+  );
+  verifyAnvilIntegrity(tarballPath);
+  console.info("Tarball integrity verified successfully");
+  mkdirSync(foundryBin, { recursive: true });
+  execSync(`tar xzf ${tarballPath} -C ${foundryBin}`, { stdio: "inherit" });
+  rmSync(tarballPath);
   process.env.PATH = `${foundryBin}:${process.env.PATH}`;
-  execSync(`foundryup --install ${FOUNDRY_VERSION}`, { stdio: "inherit" });
-  verifyAnvilVersion();
+  console.info(`Foundry ${FOUNDRY_VERSION} installed successfully`);
 }
 
 const checkPortAvailable = (port: number): Promise<void> =>
