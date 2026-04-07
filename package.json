@@ -1,6 +1,6 @@
 {
   "name": "@hemilabs/anvil-fork-setup",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vitest globalSetup factory for testing with Anvil forks",
   "keywords": [
     "anvil",
