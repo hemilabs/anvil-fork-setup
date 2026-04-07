@@ -1,0 +1,76 @@
+{
+  "name": "@hemilabs/anvil-fork-setup",
+  "version": "1.0.0",
+  "description": "Vitest globalSetup factory for testing with Anvil forks",
+  "keywords": [
+    "anvil",
+    "e2e",
+    "fork",
+    "foundry",
+    "hemilabs",
+    "testing",
+    "viem",
+    "vitest"
+  ],
+  "bugs": {
+    "url": "https://github.com/hemilabs/anvil-fork-setup/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "email": "gonzalo@hemi.xyz",
+    "name": "Gonzalo D'Elia"
+  },
+  "files": [
+    "_esm",
+    "_types",
+    "src/**/*.ts"
+  ],
+  "repository": "hemilabs/anvil-fork-setup",
+  "scripts": {
+    "build": "pnpm run clean && pnpm run build:esm && pnpm run build:types",
+    "build:esm": "tsc --noEmit false --outDir ./_esm --sourceMap",
+    "build:types": "tsc --noEmit false --declarationDir ./_types --emitDeclarationOnly --declaration --declarationMap",
+    "clean": "rm -rf ./_esm ./_types",
+    "deps:check": "knip",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "eslint --cache .",
+    "lint:fix": "eslint --cache . --fix",
+    "prepare": "husky",
+    "prepublishOnly": "pnpm run build",
+    "test": "vitest run",
+    "tsc": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@tsconfig/node24": "^24.0.0",
+    "better-sort-github-actions": "^1.0.0",
+    "better-sort-package-json": "^1.1.1",
+    "commitlint-config-bloq": "^1.1.0",
+    "eslint": "^8.57.1",
+    "eslint-config-bloq": "^4.6.1",
+    "husky": "^9.1.7",
+    "knip": "^6.3.0",
+    "lint-staged": "^16.1.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "peerDependencies": {
+    "vitest": ">=4"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.28.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./_types/index.d.ts",
+      "import": "./_esm/index.js"
+    }
+  },
+  "module": "./_esm/index.js",
+  "sideEffects": false,
+  "types": "./_types/index.d.ts"
+}
